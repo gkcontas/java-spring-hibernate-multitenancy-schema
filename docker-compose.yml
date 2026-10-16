@@ -1,0 +1,30 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: billing
+      POSTGRES_USER: billing
+      POSTGRES_PASSWORD: billing
+    ports:
+      # 5432 is free on this machine; the user's own containers publish 27017,
+      # 8083 and 4873.
+      - "5432:5432"
+    command:
+      # The schema-per-tenant strategy multiplies every table by the number of
+      # tenants, so the catalog is part of what this project measures. Raising
+      # the statement timeout keeps a cross-tenant scan over 50 schemas from
+      # being cut off mid-measurement.
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+    volumes:
+      - billing-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billing -d billing"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  billing-pgdata:

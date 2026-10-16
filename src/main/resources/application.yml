@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: multitenancy-billing
+  datasource:
+    url: jdbc:postgresql://localhost:5432/billing
+    username: billing
+    password: billing
+    hikari:
+      # One pool for every tenant. The schema-per-tenant strategy switches
+      # search_path on a connection taken from here, which is exactly why the
+      # connection has to be cleaned before it goes back.
+      maximum-pool-size: 16
+      minimum-idle: 16
+      pool-name: billing-pool
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        # The instrument of the whole project: statement counts come from here
+        # plus the StatementRecorder installed on both persistence units.
+        generate_statistics: true
+  flyway:
+    # Spring Boot's Flyway owns the shared schema only. The tenant schemas are
+    # migrated by TenantProvisioner, because their number is not known at build
+    # time and each one needs its own flyway_schema_history.
+    enabled: true
+    schemas: shared
+    create-schemas: true
+    locations: classpath:db/migration/shared
+
+app:
+  tenants:
+    # Named tenants used by the functional scenarios. Row counts differ on
+    # purpose, so a cross-tenant leak shows up as a wrong number and not just
+    # as a wrong row.
+    bootstrap:
+      - id: acme
+        display-name: Acme Industries
+        customers: 40
+        invoices-per-customer: 12
+      - id: globex
+        display-name: Globex Corporation
+        customers: 15
+        invoices-per-customer: 8
+      - id: initech
+        display-name: Initech LLC
+        customers: 7
+        invoices-per-customer: 5
+    # Extra tenants created to measure what the number of tenants costs: the
+    # migration sweep, the catalog, and the cross-tenant report.
+    bulk-count: 47
+    bulk-customers: 10
+    bulk-invoices-per-customer: 100
+    schema-prefix: tenant_
+    # Reset search_path before the connection goes back to the pool. Turning it
+    # off is what scenario search-path-leak measures.
+    reset-search-path-on-release: true
+    # When the resolver finds no tenant in the context it answers with this one
+    # instead of failing. Scenario tenant-resolution measures what that costs.
+    fallback-tenant: acme
+    fallback-enabled: true
+
+logging:
+  level:
+    com.gkcontas.multitenancy: INFO
+    org.flywaydb.core.internal.command.DbMigrate: WARN
+    # generate_statistics is on for the whole run, and this listener dumps the
+    # whole block at the end of every session. The numbers are read through the
+    # Statistics API instead.
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: WARN
+
+server:
+  error:
+    include-message: always
